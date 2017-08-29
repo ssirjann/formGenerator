@@ -11,9 +11,9 @@ class FormGenerator
     private $types = [
         'checkbox', 'password', 'radio', 'text', 'email', 'date', 'file', 'number', 'submit', 'select', 'text',
     ];
-    private $validate = ['password', 'email', 'date', 'file', ];
+    private $validate = ['email' => 'email', 'date' => 'date', 'file' => 'file', 'number' => 'number',];
     private $multiple = ['checkbox', 'radio', 'select'];
-    private $special = ['submit', 'checkbox', 'radio', 'select'];
+    private $special = ['submit', 'checkbox', 'radio', 'select', 'password'];
 
     public function __construct($name, $elements)
     {
@@ -164,10 +164,8 @@ class FormGenerator
     private function mkdir($path)
     {
         if (!is_dir($path)) {
-            return mkdir($path, 0755, true);
+            mkdir($path, 0755, true);
         }
-
-        throw new \Exception("Directory exists: " . $path);
     }
 
     private function populateView($elems = null)
@@ -185,6 +183,14 @@ class FormGenerator
     private function populateRequest($elems = null)
     {
         $elems = $elems ?: $this->getFormattedElems();
+
+        $rulesString = '[';
+
+        foreach ($elems as $elem) {
+            $rulesString .= $this->getRuleString($elem);
+        }
+
+        $rulesString .= ']';
 
     }
 
@@ -227,7 +233,7 @@ class FormGenerator
         return <<<HTML
         
     <div class="form-group {{ \$errors->has('{$field['name']}') ? ' has-error' : '' }}">
-        <label class="col-sm-2 control-label">{$field['name']}<span class="red">*</span></label>
+        <label class="col-sm-2 control-label">{$field['name']}</label>
         <div class="col-md-10">
             {!! Form::{$field['type']}('{$field['name']}', null, ['class' => 'form-control']) !!}
             @if (\$errors->has('{$field['name']}'))
@@ -247,6 +253,33 @@ HTML;
         <div class="col-md-10 col-md-offset-2">
 	        {!! Form::submit("Submit", ['class' => 'btn btn-primary']) !!}
 	    </div>
+HTML;
+    }
+
+    private function passwordFieldHtml($field)
+    {
+        $password          = $this->passwordHtml($field);
+        $field['name']     .= '_confirmation';
+        $passwordConfirmed = $this->passwordHtml($field);
+
+        return $password . $passwordConfirmed;
+    }
+
+    private function passwordHtml($field)
+    {
+        return <<<HTML
+        
+    <div class="form-group {{ \$errors->has('{$field['name']}') ? ' has-error' : '' }}">
+        <label class="col-sm-2 control-label">{$field['name']}</label>
+        <div class="col-md-10">
+            {!! Form::{$field['type']}('{$field['name']}', ['class' => 'form-control']) !!}
+            @if (\$errors->has('{$field['name']}'))
+                <span class="help-block">
+                    <strong>{{ \$errors->first('{$field['name']}') }}</strong>
+                </span>
+            @endif
+        </div>
+    </div>
 HTML;
     }
 
@@ -272,7 +305,7 @@ HTML;
         <div class="form-group {{ \$errors->has('{$field['name']}') ? ' has-error' : '' }}">
             <label class="col-sm-2 control-label">{$field['name']}</label>
             <div class="col-md-10">
-            {!! Form::select('{$field['name']}', $options, null),
+            {!! Form::select('{$field['name']}', $options, null,
                 ['class'=> 'form-control']) !!}
                 @if (\$errors->has('{$field['name']}'))
                     <span class="help-block">
@@ -350,11 +383,13 @@ HTML;
 
         $html .= <<<HTML
         
-            {!! Form::open(['route' => '{$resource}.store', 'method' => 'post',
+            {!! Form::open(['route' => '{$resource}.store', 'method' => 'put',
 			'class'=>'form-horizontal form-stripe pad-tb-15']) !!}
 HTML;
 
+        $html .= $this->getFormIncludeHtml($html);
         $html .= $this->getFooter();
+
 
         return $html;
     }
@@ -368,7 +403,7 @@ HTML;
 
         $html .= <<<HTML
         
-            {!! Form::model(\${$resource}, ['route' => ['{$resource}.update', \${$resource}], 'method' => 'post',
+            {!! Form::model(\${$resource}, ['route' => ['{$resource}.update', \${$resource}->id], 'method' => 'patch',
 			'class'=>'form-horizontal form-stripe pad-tb-15']) !!}
 HTML;
 
@@ -408,4 +443,27 @@ HTML;
         return $resource;
     }
 
+    private function getRuleString($field)
+    {
+        if (in_array($field['type'], array_keys($this->validate))) {
+            return "'{$field['name']}' => '{$this->validate[$field['type']]}', " . PHP_EOL;
+        }
+
+        return "'{$field['name']}' => '', " . PHP_EOL;
+    }
+
+    /**
+     * @param $html
+     *
+     * @return string
+     */
+    private function getFormIncludeHtml($html)
+    {
+        $html = <<<HTML
+                @include('{$$this->baseName()}.form')
+            {!! Form::close() !!};
+HTML;
+
+        return $html;
+    }
 }
